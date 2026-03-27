@@ -5,7 +5,7 @@ import time
 
 app = Flask(__name__)
 
-BOT_TOKEN = "SEU_BOT_TOKEN"  # token do BotFather
+BOT_TOKEN = "8419151743:AAH4jk7zb1NvBOGevwKgpH4b6ppO2fCwltE"  # token do BotFather
 
 # 🔐 Função pra validar dados do Telegram
 def check_telegram_auth(data):
