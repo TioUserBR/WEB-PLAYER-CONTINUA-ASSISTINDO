@@ -6,25 +6,31 @@ app = Flask(__name__)
 BOT_TOKEN = "8419151743:AAH4jk7zb1NvBOGevwKgpH4b6ppO2fCwltE"
 
 def check_telegram_auth(data):
-    auth_data = data.copy()
-    received_hash = auth_data.pop('hash', None)
+    received_hash = data.get('hash')
 
     if not received_hash:
         return False
 
+    auth_data = data.copy()
+    auth_data.pop('hash', None)
+
     data_check_string = '\n'.join(
-        [f"{k}={v}" for k, v in sorted(auth_data.items())]
+        f"{k}={v}" for k, v in sorted(auth_data.items()) if v is not None
     )
 
     secret_key = hashlib.sha256(BOT_TOKEN.encode()).digest()
 
-    calculated_hash = hmac.new(
+    hmac_hash = hmac.new(
         secret_key,
         data_check_string.encode(),
         hashlib.sha256
     ).hexdigest()
 
-    return calculated_hash == received_hash
+    print("DATA:", auth_data)
+    print("RECEBIDO:", received_hash)
+    print("CALCULADO:", hmac_hash)
+
+    return hmac_hash == received_hash
 
 
 @app.route("/")
