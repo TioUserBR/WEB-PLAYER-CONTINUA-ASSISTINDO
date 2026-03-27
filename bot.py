@@ -1,16 +1,16 @@
-from flask import Flask, request, jsonify
-import hashlib
-import hmac
-import time
+from flask import Flask, request, render_template, jsonify
+import hashlib, hmac, time
 
 app = Flask(__name__)
 
-BOT_TOKEN = "8419151743:AAH4jk7zb1NvBOGevwKgpH4b6ppO2fCwltE"  # token do BotFather
+BOT_TOKEN = "8419151743:AAH4jk7zb1NvBOGevwKgpH4b6ppO2fCwltE"
 
-# 🔐 Função pra validar dados do Telegram
 def check_telegram_auth(data):
     auth_data = data.copy()
-    received_hash = auth_data.pop('hash')
+    received_hash = auth_data.pop('hash', None)
+
+    if not received_hash:
+        return False
 
     data_check_string = '\n'.join(
         [f"{k}={v}" for k, v in sorted(auth_data.items())]
@@ -26,34 +26,30 @@ def check_telegram_auth(data):
 
     return calculated_hash == received_hash
 
-# 🚀 Rota de login
+
+@app.route("/")
+def home():
+    return render_template("index.html")
+
+
 @app.route("/auth")
-def telegram_auth():
+def auth():
     data = request.args.to_dict()
 
-    # valida assinatura
     if not check_telegram_auth(data):
-        return jsonify({"status": "erro", "msg": "hash inválido"}), 403
+        return "❌ Login inválido"
 
-    # valida tempo (anti replay attack)
     auth_date = int(data.get("auth_date", 0))
     if time.time() - auth_date > 86400:
-        return jsonify({"status": "erro", "msg": "login expirado"}), 403
+        return "⏰ Login expirado"
 
-    # dados do usuário
-    user = {
-        "id": data.get("id"),
-        "first_name": data.get("first_name"),
-        "username": data.get("username"),
-        "photo_url": data.get("photo_url")
-    }
-
-    # 👉 aqui você salva no banco se quiser
-
-    return jsonify({
-        "status": "ok",
-        "user": user
-    })
+    return f"""
+    <h1>✅ Logado com sucesso</h1>
+    <p>ID: {data.get('id')}</p>
+    <p>Nome: {data.get('first_name')}</p>
+    <p>User: @{data.get('username')}</p>
+    """
+    
 
 if __name__ == "__main__":
     app.run(debug=True)
