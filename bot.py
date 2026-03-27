@@ -1,19 +1,59 @@
-from flask import Flask, request, render_template, make_response, jsonify
+from flask import Flask, request, jsonify
+import hashlib
+import hmac
+import time
 
 app = Flask(__name__)
 
-@app.route('/')
-def index():
-    video_url = request.args.get('url')  # Obtém o URL do vídeo da query string
-    saved_time = request.cookies.get('video_time', 0)  # Obtém o tempo salvo nos cookies
-    return render_template('video_player.html', video_url=video_url, saved_time=saved_time)
+BOT_TOKEN = "SEU_BOT_TOKEN"  # token do BotFather
 
-@app.route('/save_time', methods=['POST'])
-def save_time():
-    time = request.json.get('time', 0)  # Recebe o tempo atual do vídeo
-    response = make_response(jsonify({"message": "Time saved"}))
-    response.set_cookie('video_time', str(time), max_age=7 * 24 * 60 * 60)  # Salva o tempo por 7 dias
-    return response
+# 🔐 Função pra validar dados do Telegram
+def check_telegram_auth(data):
+    auth_data = data.copy()
+    received_hash = auth_data.pop('hash')
 
-if __name__ == '__main__':
+    data_check_string = '\n'.join(
+        [f"{k}={v}" for k, v in sorted(auth_data.items())]
+    )
+
+    secret_key = hashlib.sha256(BOT_TOKEN.encode()).digest()
+
+    calculated_hash = hmac.new(
+        secret_key,
+        data_check_string.encode(),
+        hashlib.sha256
+    ).hexdigest()
+
+    return calculated_hash == received_hash
+
+# 🚀 Rota de login
+@app.route("/auth")
+def telegram_auth():
+    data = request.args.to_dict()
+
+    # valida assinatura
+    if not check_telegram_auth(data):
+        return jsonify({"status": "erro", "msg": "hash inválido"}), 403
+
+    # valida tempo (anti replay attack)
+    auth_date = int(data.get("auth_date", 0))
+    if time.time() - auth_date > 86400:
+        return jsonify({"status": "erro", "msg": "login expirado"}), 403
+
+    # dados do usuário
+    user = {
+        "id": data.get("id"),
+        "first_name": data.get("first_name"),
+        "username": data.get("username"),
+        "photo_url": data.get("photo_url")
+    }
+
+    # 👉 aqui você salva no banco se quiser
+
+    return jsonify({
+        "status": "ok",
+        "user": user
+    })
+
+if __name__ == "__main__":
     app.run(debug=True)
