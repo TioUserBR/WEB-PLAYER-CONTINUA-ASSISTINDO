@@ -1,61 +1,91 @@
-from flask import Flask, request, render_template, jsonify
-import hashlib, hmac, time
+from flask import Flask, request, jsonify
+import psycopg2
 
 app = Flask(__name__)
 
-BOT_TOKEN = "8419151743:AAH4jk7zb1NvBOGevwKgpH4b6ppO2fCwltE"
+DB_URL = "postgresql://postgres:Flavioleal91%21@db.yymysrghprccaxfehdts.supabase.co:5432/postgres"
 
-def check_telegram_auth(data):
-    received_hash = data.get('hash')
+def get_conn():
+    return psycopg2.connect(DB_URL)
 
-    if not received_hash:
-        return False
+# Criar tabelas automaticamente
+def init_db():
+    conn = get_conn()
+    cur = conn.cursor()
 
-    auth_data = data.copy()
-    auth_data.pop('hash', None)
-
-    data_check_string = '\n'.join(
-        f"{k}={v}" for k, v in sorted(auth_data.items()) if v is not None
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS pedidos (
+        id SERIAL PRIMARY KEY,
+        cliente TEXT,
+        endereco TEXT,
+        pego BOOLEAN DEFAULT FALSE
     )
+    """)
 
-    secret_key = hashlib.sha256(BOT_TOKEN.encode()).digest()
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS itens (
+        id SERIAL PRIMARY KEY,
+        pedido_id INTEGER REFERENCES pedidos(id) ON DELETE CASCADE,
+        ferramenta TEXT,
+        quantidade INTEGER
+    )
+    """)
 
-    hmac_hash = hmac.new(
-        secret_key,
-        data_check_string.encode(),
-        hashlib.sha256
-    ).hexdigest()
+    conn.commit()
+    cur.close()
+    conn.close()
 
-    print("DATA:", auth_data)
-    print("RECEBIDO:", received_hash)
-    print("CALCULADO:", hmac_hash)
+init_db()
 
-    return hmac_hash == received_hash
+# Rota POST
+@app.route('/postar', methods=['POST'])
+def postar():
+    try:
+        data = request.get_json()
 
+        cliente = data.get('cliente')
+        endereco = data.get('endereco')
+        pego = data.get('pego', False)
 
-@app.route("/")
-def home():
-    return render_template("index.html")
+        ferramentas = data.get('ferramentas', [])
 
+        conn = get_conn()
+        cur = conn.cursor()
 
-@app.route("/auth")
-def auth():
-    data = request.args.to_dict()
+        # Inserir pedido
+        cur.execute(
+            "INSERT INTO pedidos (cliente, endereco, pego) VALUES (%s, %s, %s) RETURNING id",
+            (cliente, endereco, pego)
+        )
 
-    if not check_telegram_auth(data):
-        return "❌ Login inválido"
+        pedido_id = cur.fetchone()[0]
 
-    auth_date = int(data.get("auth_date", 0))
-    if time.time() - auth_date > 86400:
-        return "⏰ Login expirado"
+        # Inserir múltiplas ferramentas
+        for item in ferramentas:
+            nome = item.get('nome')
+            quantidade = item.get('quantidade')
 
-    return f"""
-    <h1>✅ Logado com sucesso</h1>
-    <p>ID: {data.get('id')}</p>
-    <p>Nome: {data.get('first_name')}</p>
-    <p>User: @{data.get('username')}</p>
-    """
-    
+            cur.execute(
+                "INSERT INTO itens (pedido_id, ferramenta, quantidade) VALUES (%s, %s, %s)",
+                (pedido_id, nome, quantidade)
+            )
 
-if __name__ == "__main__":
-    app.run(debug=True)
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        return jsonify({
+            "status": "ok",
+            "pedido_id": pedido_id
+        })
+
+    except Exception as e:
+        return jsonify({
+            "status": "erro",
+            "msg": str(e)
+        })
+
+if __name__ == '__main__':
+    criar_tabela()
+    print("🚀 Servidor rodando em http://0.0.0.0:4003")
+    app.run(debug=True, host='0.0.0.0', port=5000)
