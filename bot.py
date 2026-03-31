@@ -6,9 +6,9 @@ app = Flask(__name__)
 DB_URL = "postgresql://postgres:Flavioleal91%21@db.yymysrghprccaxfehdts.supabase.co:5432/postgres"
 
 def get_conn():
-    return psycopg2.connect(DB_URL)
+    return psycopg2.connect(DB_URL, sslmode="require")
 
-# Criar tabelas automaticamente
+
 def init_db():
     conn = get_conn()
     cur = conn.cursor()
@@ -35,18 +35,23 @@ def init_db():
     cur.close()
     conn.close()
 
-init_db()
 
-# Rota POST
+@app.route('/')
+def home():
+    return "API OK"
+
+
 @app.route('/postar', methods=['POST'])
 def postar():
     try:
         data = request.get_json()
 
+        if not data:
+            return jsonify({"status": "erro", "msg": "JSON vazio"}), 400
+
         cliente = data.get('cliente')
         endereco = data.get('endereco')
         pego = data.get('pego', False)
-
         ferramentas = data.get('ferramentas', [])
 
         conn = get_conn()
@@ -60,14 +65,15 @@ def postar():
 
         pedido_id = cur.fetchone()[0]
 
-        # Inserir múltiplas ferramentas
+        # Inserir itens
         for item in ferramentas:
-            nome = item.get('nome')
-            quantidade = item.get('quantidade')
-
             cur.execute(
                 "INSERT INTO itens (pedido_id, ferramenta, quantidade) VALUES (%s, %s, %s)",
-                (pedido_id, nome, quantidade)
+                (
+                    pedido_id,
+                    item.get('nome'),
+                    item.get('quantidade')
+                )
             )
 
         conn.commit()
@@ -83,9 +89,10 @@ def postar():
         return jsonify({
             "status": "erro",
             "msg": str(e)
-        })
+        }), 500
+
 
 if __name__ == '__main__':
-    criar_tabela()
-    print("🚀 Servidor rodando em http://0.0.0.0:4003")
+    init_db()  # agora sim correto
+    print("🚀 Servidor rodando em http://0.0.0.0:5000")
     app.run(debug=True, host='0.0.0.0', port=5000)
